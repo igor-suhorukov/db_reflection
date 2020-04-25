@@ -1,0 +1,353 @@
+Index: src/main/java/org/schemaspy/model/TableColumn.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/TableColumn.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/TableColumn.java	(date 1587503519373)
+@@ -24,6 +24,7 @@
+
+ import org.schemaspy.input.dbms.xml.TableColumnMeta;
+
++import java.io.Serializable;
+ import java.sql.DatabaseMetaData;
+ import java.util.*;
+ import java.util.regex.Pattern;
+@@ -34,7 +35,7 @@
+  * @author Thomas Traude
+  * @author Daniel Watt
+  */
+-public class TableColumn {
++public class TableColumn implements Serializable {
+     private final Table table;
+     private String name;
+     private Object id;
+@@ -522,7 +523,7 @@
+     /**
+      * Two {@link TableColumn}s are considered equal if their tables and names match.
+      */
+-    private class ColumnComparator implements Comparator<TableColumn> {
++    private class ColumnComparator implements Comparator<TableColumn>, Serializable {
+         public int compare(TableColumn column1, TableColumn column2) {
+             int rc = column1.getTable().compareTo(column2.getTable());
+             if (rc == 0)
+Index: pom.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- pom.xml	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ pom.xml	(date 1587507578278)
+@@ -35,7 +35,7 @@
+         <sonar.junit.reportPaths>target/surefire-reports,target/failsafe-reports</sonar.junit.reportPaths>
+
+         <spring-boot.version>2.1.2.RELEASE</spring-boot.version>
+-        <testcontainers-java.version>1.10.1</testcontainers-java.version>
++        <testcontainers-java.version>1.14.0</testcontainers-java.version>
+         <testcontainers-junit.version>${testcontainers-java.version}.0.0</testcontainers-junit.version>
+
+         <java.version>1.8</java.version>
+@@ -202,7 +202,7 @@
+         <dependency>
+             <groupId>com.github.npetzall.testcontainers.junit</groupId>
+             <artifactId>jdbc</artifactId>
+-            <version>${testcontainers-junit.version}</version>
++            <version>1.10.1.0.0</version>
+             <scope>test</scope>
+         </dependency>
+         <dependency>
+@@ -306,6 +306,17 @@
+                 <groupId>org.apache.maven.plugins</groupId>
+                 <artifactId>maven-jar-plugin</artifactId>
+                 <version>3.1.2</version>
++                <executions>
++                    <execution>
++                        <phase>package</phase>
++                        <goals>
++                            <goal>jar</goal>
++                        </goals>
++                        <configuration>
++                            <classifier>original</classifier>
++                        </configuration>
++                    </execution>
++                </executions>
+                 <configuration>
+                     <archive>
+                         <manifestEntries>
+Index: src/main/java/org/schemaspy/model/TableIndex.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/TableIndex.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/TableIndex.java	(date 1587503359212)
+@@ -22,6 +22,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.*;
+
+ /**
+@@ -30,7 +31,7 @@
+  * @author Wojciech Kasa
+  * @author Daniel Watt
+  */
+-public class TableIndex implements Comparable<TableIndex> {
++public class TableIndex implements Comparable<TableIndex>, Serializable {
+     private final String name;
+     private final boolean isUnique;
+     private Object id;
+Index: src/main/java/org/schemaspy/model/Catalog.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Catalog.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Catalog.java	(date 1587503359136)
+@@ -21,6 +21,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.Objects;
+
+ /**
+@@ -29,7 +30,7 @@
+  * @author Daniel Watt
+  * @author Nils Petzaell
+  */
+-public final class Catalog implements Comparable<Catalog>{
++public final class Catalog implements Comparable<Catalog> , Serializable {
+     private final String name;
+     private String comment;
+
+Index: src/main/java/org/schemaspy/model/RoutineParameter.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/RoutineParameter.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/RoutineParameter.java	(date 1587503359352)
+@@ -19,12 +19,14 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
++
+ /**
+  * Immutable metadata about a parameter used in a stored procedure or function
+  *
+  * @author John Currier
+  */
+-public class RoutineParameter {
++public class RoutineParameter implements Serializable {
+     private final String name;
+     private final String type;
+     private final String mode;
+Index: src/main/java/org/schemaspy/model/Schema.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Schema.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Schema.java	(date 1587503359172)
+@@ -21,6 +21,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.Objects;
+
+ /**
+@@ -29,7 +30,7 @@
+  * @author Daniel Watt
+  * @author Nils Petzaell
+  */
+-public final class Schema implements Comparable<Schema>{
++public final class Schema implements Comparable<Schema>, Serializable {
+ 	private final String name;
+ 	private String comment =null;
+
+Index: src/main/java/org/schemaspy/model/Sequence.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Sequence.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Sequence.java	(date 1587503358852)
+@@ -19,7 +19,9 @@
+
+ package org.schemaspy.model;
+
+-public class Sequence implements Comparable<Sequence> {
++import java.io.Serializable;
++
++public class Sequence implements Comparable<Sequence>, Serializable {
+     private final String name;
+     private final Integer startValue;
+     private final Integer increment;
+Index: src/main/java/org/schemaspy/model/Routine.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Routine.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Routine.java	(date 1587503359256)
+@@ -20,6 +20,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.ArrayList;
+ import java.util.List;
+
+@@ -29,7 +30,7 @@
+  * @author John Currier
+  * @author Mårten Bohlin
+  */
+-public class Routine implements Comparable<Routine> {
++public class Routine implements Comparable<Routine>, Serializable {
+     private final String name;
+     private final String type;
+     private final String definitionLanguage;
+Index: src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(date 1587503358944)
+@@ -19,10 +19,12 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
++
+ /**
+  * @author John Currier
+  */
+-public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint {
++public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint implements Serializable {
+     /**
+      * @param parentColumn
+      * @param childColumn
+Index: src/main/java/org/schemaspy/model/DbmsMeta.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/DbmsMeta.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/DbmsMeta.java	(date 1587503358988)
+@@ -18,13 +18,14 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.HashSet;
+ import java.util.Set;
+
+ /**
+  * @author Nils Petzaell
+  */
+-public class DbmsMeta {
++public class DbmsMeta implements Serializable {
+
+     private String productName;
+     private String productVersion;
+Index: src/main/java/org/schemaspy/model/ForeignKeyConstraint.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(date 1587503359300)
+@@ -25,6 +25,7 @@
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+
++import java.io.Serializable;
+ import java.lang.invoke.MethodHandles;
+ import java.util.ArrayList;
+ import java.util.Collections;
+@@ -42,7 +43,7 @@
+  * @author Wojciech Kasa
+  * @author Daniel Watt
+  */
+-public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint> {
++public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint>, Serializable {
+     private final String name;
+     private Table parentTable;
+     private final List<TableColumn> parentColumns = new ArrayList<>();
+Index: src/main/java/org/schemaspy/model/Database.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Database.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Database.java	(date 1587503358896)
+@@ -25,6 +25,7 @@
+
+ import org.schemaspy.util.CaseInsensitiveMap;
+
++import java.io.Serializable;
+ import java.time.ZonedDateTime;
+ import java.time.format.DateTimeFormatter;
+ import java.util.Collection;
+@@ -38,7 +39,7 @@
+  * @author Daniel Watt
+  *
+  */
+-public class Database {
++public class Database implements Serializable {
+
+     private final DbmsMeta dbmsMeta;
+     private final String databaseName;
+Index: src/main/java/org/schemaspy/model/Table.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Table.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Table.java	(date 1587503358808)
+@@ -29,6 +29,7 @@
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+
++import java.io.Serializable;
+ import java.lang.invoke.MethodHandles;
+ import java.util.*;
+
+@@ -42,7 +43,7 @@
+  * @author Daniel Watt
+  * @author Nils Petzaell
+  */
+-public class Table implements Comparable<Table> {
++public class Table implements Comparable<Table>, Serializable {
+     private final String catalog;
+     private final String schema;
+     private final String name;
+Index: src/main/java/org/schemaspy/model/CombinedMap.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/CombinedMap.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/CombinedMap.java	(date 1587503358760)
+@@ -21,6 +21,7 @@
+
+ import org.schemaspy.util.CaseInsensitiveMap;
+
++import java.io.Serializable;
+ import java.util.Collection;
+ import java.util.Map;
+ import java.util.Set;
+@@ -33,7 +34,7 @@
+  *
+  * @author John Currier
+  */
+-class CombinedMap implements Map<String, Table> {
++class CombinedMap implements Map<String, Table>, Serializable {
+     private final Map<String, ? extends Table> map1;
+     private final Map<String, ? extends Table> map2;
+
