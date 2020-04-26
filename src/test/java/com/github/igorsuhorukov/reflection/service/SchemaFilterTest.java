@@ -2,19 +2,17 @@ package com.github.igorsuhorukov.reflection.service;
 
 import com.github.igorsuhorukov.reflection.model.core.Table;
 import com.github.igorsuhorukov.reflection.model.matcher.DbObjectFilter;
-import lombok.SneakyThrows;
 import org.junit.jupiter.api.Test;
 import org.schemaspy.model.Database;
 
-import java.io.ObjectInputStream;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SchemaFilterTest {
     @Test
-    void testAllTables() throws Exception{
-        Database database = getDatabase();
+    void testAllTables() {
+        Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
                 DbObjectFilter(null, null, false,null));
         assertThat(tables).hasSize(8);
@@ -38,16 +36,9 @@ public class SchemaFilterTest {
 
     @Test
     void testAllTablesWithViews() {
-        Database database = getDatabase();
+        Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
                 DbObjectFilter(null, null, true,null));
         assertThat(tables).hasSize(12);
-    }
-
-    @SneakyThrows
-    private Database getDatabase() {
-        ObjectInputStream objectInputStream = new ObjectInputStream(
-                SchemaFilterTest.class.getResourceAsStream("/model.obj"));
-        return (Database) objectInputStream.readObject();
     }
 }

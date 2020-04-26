@@ -1,9 +1,9 @@
 package com.github.igorsuhorukov.reflection.model.copy;
 
+import com.github.igorsuhorukov.reflection.model.copy.refresh.RefreshSettings;
 import lombok.Value;
 
 import java.util.List;
-import com.github.igorsuhorukov.reflection.model.copy.refresh.RefreshSettings;
 
 @Value
 public class Settings {
