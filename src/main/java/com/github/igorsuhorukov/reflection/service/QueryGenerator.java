@@ -52,11 +52,11 @@ public class QueryGenerator {
         return isColumnsPart ? partitionQueryPart + ", count(*) as part_rec_cnt" : partitionQueryPart;
     }
 
-    public List<String> generate(List<Table> tables){
+    public List<Query> generate(List<Table> tables){
         return generate(tables, null);
     }
 
-    public List<String> generate(List<Table> tables, TableSettings tableSettings){
+    public List<Query> generate(List<Table> tables, TableSettings tableSettings){
         return tables.stream().filter(table -> !table.getColumns().isEmpty()).map(table -> {
             Settings settings = tableSettings!=null ? tableSettings.get(table.getTable()) : null;
             String columns = table.getColumns().stream().map(column -> {
@@ -83,7 +83,14 @@ public class QueryGenerator {
                 query.append(table.getSchema()).append('.');
             }
             query.append(table.getTable());
-            return query.toString();
+            if(settings!=null && settings.getSorts()!=null && !settings.getSorts().isEmpty()){
+                query.append(" order by ");
+                String sortClause = settings.getSorts().stream().map(sort ->
+                        sort.getColumn() + (sort.getOrder() != null ? " " + sort.getOrder() : "")).
+                        collect(Collectors.joining(", "));
+                query.append(sortClause);
+            }
+            return new Query(table, query.toString());
         }).collect(Collectors.toList());
     }
 }

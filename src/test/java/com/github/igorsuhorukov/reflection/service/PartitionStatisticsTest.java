@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 public class PartitionStatisticsTest {
     @Test
-    void prepareDb() throws Exception{
+    void partitionClause() throws Exception{
         Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
                 DbObjectFilter(null, null, true,null));
