@@ -40,27 +40,20 @@ public class SchemaFilter {
             } else {
                 //filter columns
                 columns = table.getColumnsMap().keySet().stream().map(columnName -> {
-                    List<Column> columnRuleApply = applicableColumnRules.stream().map(columnRule -> {
-                        if (columnRule.getTable().match(table.getName())) {
-                            return columnRule;
-                        } else {
-                            return null;
-                        }
-                    }).filter(Objects::nonNull).map(columnRule -> {
-                        if (columnRule.getColumn().match(columnName)) {
-                            return new Column(columnName, columnRule.getTransformation());
-                        } else {
-                            return null;
-                        }
-                    }).collect(Collectors.toList());
-                    Optional<Column> notMatch = columnRuleApply.stream().filter(Objects::isNull).findFirst();
-                    if (notMatch.isPresent()){
+                    List<ColumnRule> columnMatchedRule = applicableColumnRules.stream().filter(columnRule ->
+                            columnRule.getTable().match(table.getName()) && columnRule.getColumn().match(columnName)).collect(Collectors.toList());
+                    boolean excludeColumn = columnMatchedRule.stream().anyMatch(ColumnRule::isExclude);
+                    if(excludeColumn){
                         return null;
                     } else {
-                        return columnRuleApply.stream().filter(Objects::nonNull).findFirst().orElse(null);
+                        Optional<ColumnRule> columnRule = columnMatchedRule.stream().findFirst();
+                        return columnRule.map(rule -> new Column(columnName,
+                                rule.getTransformation(), rule.getFilterPredicate())).orElse(new Column(columnName));
                     }
+
                 }).filter(Objects::nonNull).collect(Collectors.toList());
             }
+
             return new Table(database.getSchema().getName(), table.getName(), columns);
         }).collect(Collectors.toList());
     }

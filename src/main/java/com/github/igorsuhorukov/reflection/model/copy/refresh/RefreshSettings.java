@@ -13,6 +13,7 @@ public class RefreshSettings {
     java.sql.Timestamp
     java.util.Date
     java.lang.Integer
+    java.lang.Long
     java.lang.Float
     java.lang.Double
     java.lang.String

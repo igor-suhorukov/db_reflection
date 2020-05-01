@@ -7,6 +7,7 @@ import com.github.igorsuhorukov.reflection.model.core.Query;
 import com.github.igorsuhorukov.reflection.model.core.Table;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,6 +84,16 @@ public class QueryGenerator {
                 query.append(table.getSchema()).append('.');
             }
             query.append(table.getTable());
+            String where = table.getColumns().stream().map(column -> {
+                if (column.getFilterPredicate() != null && !column.getFilterPredicate().isEmpty()) {
+                    return String.format(column.getFilterPredicate(), column.getColumn());
+                } else {
+                    return null;
+                }
+            }).filter(Objects::nonNull).collect(Collectors.joining(", "));
+            if(!where.isEmpty()){
+                query.append(" where ").append(where);
+            }
             if(settings!=null && settings.getSorts()!=null && !settings.getSorts().isEmpty()){
                 query.append(" order by ");
                 String sortClause = settings.getSorts().stream().map(sort ->
