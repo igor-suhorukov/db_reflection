@@ -3,6 +3,7 @@ package com.github.igorsuhorukov.reflection.service;
 import com.github.igorsuhorukov.reflection.model.copy.Partition;
 import com.github.igorsuhorukov.reflection.model.copy.Settings;
 import com.github.igorsuhorukov.reflection.model.copy.TableSettings;
+import com.github.igorsuhorukov.reflection.model.copy.refresh.RefreshSettings;
 import com.github.igorsuhorukov.reflection.model.core.Query;
 import com.github.igorsuhorukov.reflection.model.core.Table;
 
@@ -13,33 +14,38 @@ import java.util.stream.Collectors;
 
 public class QueryGenerator {
 
-    public List<Query> generateStatQuery(List<Table> tables, TableSettings tableSettings){
+    public List<Query> generateStatQuery(List<Table> tables, TableSettings tableSettings, boolean incrementalMode){
         Set<String> partitionedTables = tableSettings.keySet();//validate non null partitions
         return tables.stream().filter(table ->
                 partitionedTables.contains(table.getTable())).map(table -> {
             Settings settings = tableSettings.get(table.getTable());
-            //settings.getPartitions().stream().map(partition -> )
+            RefreshSettings refreshSettings = settings.getRefreshSettings();
             StringBuilder query = new StringBuilder().
                     append("select ").
-                        append(generatePartitionsQueryPart(true, settings.getPartitions())).
-                    append(" from ");
+                        append(generatePartitionsQueryPart(true,
+                                                            settings.getPartitions(), refreshSettings));
+            if(refreshSettings !=null &&
+                    refreshSettings.getIncrementalField()!=null && !refreshSettings.getIncrementalField().isEmpty()){
+                query.append(", min(").append(refreshSettings.getIncrementalField()).append(") as min_incremental_field").
+                        append(", max(").append(refreshSettings.getIncrementalField()).append(") as max_incremental_field");
+            }
+            query.append(" from ");
             if(table.getSchema()!=null && !table.getSchema().isEmpty()){
                 query.append(table.getSchema()).append('.');
             }
-/*
-            if(settings.getRefreshSettings()!=null && settings.getRefreshSettings().getIncrementalField()!=null){
-                query.append(" where ").append(settings.getRefreshSettings().
-                    getIncrementalField()).append(" > ").append(latestFetchedValue);
+            query.append(table.getTable());
+            if(refreshSettings !=null && incrementalMode &&
+                    refreshSettings.getIncrementalField()!=null && !refreshSettings.getIncrementalField().isEmpty()){
+                query.append(" where ").append(settings.getRefreshSettings().getIncrementalField()).append(" >= ? ");
             }
-*/
-            query.append(table.getTable()).
-                    append(" group by ").
-                        append(generatePartitionsQueryPart(false, settings.getPartitions()));
+            query.append(" group by ").
+                        append(generatePartitionsQueryPart(false,
+                                                            settings.getPartitions(), refreshSettings));
             return new Query(table, query.toString());
         }).collect(Collectors.toList());
     }
 
-    private String generatePartitionsQueryPart(boolean isColumnsPart, List<Partition> partitions) {
+    private String generatePartitionsQueryPart(boolean isColumnsPart, List<Partition> partitions, RefreshSettings refreshSettings) {
         final String partitionQueryPart = partitions.stream().map(partition -> {
             final String partitionName = isColumnsPart &&
                     partition.getPartitionName() != null && !partition.getPartitionName().isEmpty() ?
@@ -94,6 +100,7 @@ public class QueryGenerator {
             if(!where.isEmpty()){
                 query.append(" where ").append(where);
             }
+            //support incremental mode
             if(settings!=null && settings.getSorts()!=null && !settings.getSorts().isEmpty()){
                 query.append(" order by ");
                 String sortClause = settings.getSorts().stream().map(sort ->

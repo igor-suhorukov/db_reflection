@@ -7,9 +7,9 @@ import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Statistics {
+public class ResultSetReader {
 
-    public InMemoryResultSet getStatistics(Connection connection, Query query)
+    public InMemoryResultSet getQueryResultSet(Connection connection, Query query)
             throws SQLException {
         try (Statement statement = connection.createStatement()){
             try (ResultSet resultSet = statement.executeQuery(query.getQuery())){

@@ -5,6 +5,8 @@ import com.github.igorsuhorukov.postgresql.model.FileWithArgs;
 import com.github.igorsuhorukov.reflection.model.copy.Partition;
 import com.github.igorsuhorukov.reflection.model.copy.Settings;
 import com.github.igorsuhorukov.reflection.model.copy.TableSettings;
+import com.github.igorsuhorukov.reflection.model.copy.refresh.RefreshSettings;
+import com.github.igorsuhorukov.reflection.model.copy.refresh.RefreshType;
 import com.github.igorsuhorukov.reflection.model.core.InMemoryResultSet;
 import com.github.igorsuhorukov.reflection.model.core.Query;
 import com.github.igorsuhorukov.reflection.model.core.Table;
@@ -38,10 +40,9 @@ public class PartitionStatisticsTest {
                         "date_trunc('month', %s)::date"),
                 new Partition("airport_part","departure_airport",null)
         ),null, null));
+        List<Query> generate = new QueryGenerator().generateStatQuery(tables, tableSettings, false);
 
-        List<Query> generate = new QueryGenerator().generateStatQuery(tables, tableSettings);
-
-        Statistics statistics = new Statistics();
+        ResultSetReader resultSetReader = new ResultSetReader();
 
         List<InMemoryResultSet> resultSets = new ArrayList<>();
 
@@ -51,13 +52,43 @@ public class PartitionStatisticsTest {
             postgresql.start();
             try (Connection connection = DriverManager.getConnection(postgresql.getJdbcConnectionUrl())){
                 for(Query query: generate) {
-                    resultSets.add(statistics.getStatistics(connection, query));
+                    resultSets.add(resultSetReader.getQueryResultSet(connection, query));
                 }
             }
         }
         final InMemoryResultSet[] sourceStatistics = resultSets.toArray(new InMemoryResultSet[0]);
         String statisticsJson = new ResultSetSerializer().toJson(sourceStatistics);
         assertThat(statisticsJson).isEqualToIgnoringWhitespace(expectedJson());
+    }
+
+    @Test
+    void partitionClauseRefreshRule() {
+        Database database = Utils.getDatabase();
+        List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
+                DbObjectFilter(null, null, true,null));
+        String bookings = "bookings";
+        String flights = "flights";
+        final TableSettings tableSettings = new TableSettings();
+        tableSettings.put(bookings, new Settings(Collections.singletonList(
+                new Partition("book_date_part", "book_date",
+                        "date_trunc('month', %s)")),null, new RefreshSettings(RefreshType.INCREMENTAL, "",0L,"book_ref")));
+        tableSettings.put(flights, new Settings(Arrays.asList(
+                new Partition("scheduled_departure_part","scheduled_departure",
+                        "date_trunc('month', %s)::date"),
+                new Partition("airport_part","departure_airport",null)
+        ),null, new RefreshSettings(RefreshType.INCREMENTAL, "",0L,"actual_departure")));
+
+        List<Query> generate = new QueryGenerator().generateStatQuery(tables, tableSettings, true);
+
+        final Optional<Query> flightQuery = generate.stream().filter(query ->
+                flights.equals(query.getTable().getTable())).findFirst();
+        assertThat(flightQuery.isPresent()).isTrue();
+        assertThat(flightQuery.get().getQuery()).isEqualTo("select date_trunc('month', scheduled_departure)::date as scheduled_departure_part, departure_airport as airport_part, count(*) as part_rec_cnt, min(actual_departure) as min_incremental_field, max(actual_departure) as max_incremental_field from bookings.flights where actual_departure >= ?  group by date_trunc('month', scheduled_departure)::date, departure_airport");
+
+        final Optional<Query> bookingsQuery = generate.stream().filter(query ->
+                bookings.equals(query.getTable().getTable())).findFirst();
+        assertThat(bookingsQuery.isPresent()).isTrue();
+        assertThat(bookingsQuery.get().getQuery()).isEqualTo("select date_trunc('month', book_date) as book_date_part, count(*) as part_rec_cnt, min(book_ref) as min_incremental_field, max(book_ref) as max_incremental_field from bookings.bookings where book_ref >= ?  group by date_trunc('month', book_date)");
     }
 
     @Test
