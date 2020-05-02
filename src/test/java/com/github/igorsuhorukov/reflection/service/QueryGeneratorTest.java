@@ -11,6 +11,7 @@ import com.github.igorsuhorukov.reflection.model.matcher.Matcher;
 import com.github.igorsuhorukov.reflection.model.matcher.Rule;
 import com.github.igorsuhorukov.reflection.model.matcher.filter.ComplexFilter;
 import com.github.igorsuhorukov.reflection.model.matcher.filter.ExactTablesAndColumnsOnlyFilter;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.schemaspy.model.Database;
 
@@ -47,7 +48,7 @@ public class QueryGeneratorTest {
     }
 
     @Test
-    void testColumnFilter() throws Exception{
+    void testColumnFilter() {
         Database database = Utils.getDatabase();
         final DbObjectFilter objectFilter = new
                 DbObjectFilter(null, true, new ComplexFilter(null, Arrays.asList(
@@ -71,7 +72,7 @@ public class QueryGeneratorTest {
     @Test
     void testExactTableAndColumnFilter() {
         Database database = Utils.getDatabase();
-        final ExactTablesAndColumnsOnlyFilter tableAndColumnFilter = new ExactTablesAndColumnsOnlyFilter();
+        final ExactTablesAndColumnsOnlyFilter tableAndColumnFilter = new ExactTablesAndColumnsOnlyFilter(true);
         final String bookingsTable = "bookings";
         final String flightsTable = "flights";
         Set<String> bookings = new HashSet<>(Arrays.asList("book_ref", "book_date", "total_amount"));
@@ -90,5 +91,67 @@ public class QueryGeneratorTest {
         Table table2 = tables.get(1);
         assertThat(table2.getTable()).isEqualTo(flightsTable);
         assertThat(table2.getColumns()).hasSize(flights.size());
+    }
+
+    @Test
+    void testExactTableAndColumnFilterTableNotFound() {
+        Database database = Utils.getDatabase();
+        ExactTablesAndColumnsOnlyFilter tableAndColumnFilter = new ExactTablesAndColumnsOnlyFilter(true);
+        String bookingsTable = "bookings123";
+        tableAndColumnFilter.put(bookingsTable, null);
+
+        DbObjectFilter objectFilter = new
+                DbObjectFilter(null, true, tableAndColumnFilter);
+
+        IllegalStateException illegalStateException = Assertions.assertThrows(IllegalStateException.class, () ->
+                new SchemaFilter().filterDatabaseObject(database, objectFilter));
+        assertThat(illegalStateException.getMessage()).isEqualTo("Following tables not found in database: bookings123");
+    }
+
+    @Test
+    void testExactTableAndColumnFilterColumnsNotFound() {
+        Database database = Utils.getDatabase();
+        ExactTablesAndColumnsOnlyFilter tableAndColumnFilter = new ExactTablesAndColumnsOnlyFilter(true);
+        String bookingsTable = "bookings";
+        String flightsTable = "flights";
+        Set<String> bookings = new HashSet<>(Arrays.asList("book_ref256", "book_date1024"));
+        tableAndColumnFilter.put(bookingsTable, bookings);
+        Set<String> flights = new HashSet<>(Arrays.asList("flight_id64", "flight_no256",
+                                                            "scheduled_departure512", "aircraft_code"));
+        tableAndColumnFilter.put(flightsTable, flights);
+
+        DbObjectFilter objectFilter = new
+                DbObjectFilter(null, true, tableAndColumnFilter);
+
+        IllegalStateException illegalStateException = Assertions.assertThrows(IllegalStateException.class, () ->
+                new SchemaFilter().filterDatabaseObject(database, objectFilter));
+        assertThat(illegalStateException.getMessage()).isEqualTo("Following columns isn't found in database: " +
+                "[bookings=[book_ref256, book_date1024], flights=[flight_id64, scheduled_departure512, flight_no256]]");
+
+    }
+
+    @Test
+    void testExactTableAndColumnFilterColumnsNotFoundSilentMode() {
+        Database database = Utils.getDatabase();
+        ExactTablesAndColumnsOnlyFilter tableAndColumnFilter = new ExactTablesAndColumnsOnlyFilter(false);
+        String bookingsTable = "bookings";
+        String flightsTable = "flights";
+        Set<String> bookings = new HashSet<>(Arrays.asList("book_ref", "book_date1024"));
+        tableAndColumnFilter.put(bookingsTable, bookings);
+        Set<String> flights = new HashSet<>(Arrays.asList("flight_id64", "flight_no256",
+                                                            "scheduled_departure512", "aircraft_code"));
+        tableAndColumnFilter.put(flightsTable, flights);
+
+        DbObjectFilter objectFilter = new
+                DbObjectFilter(null, true, tableAndColumnFilter);
+
+        List<Table> tables = new SchemaFilter().filterDatabaseObject(database, objectFilter);
+        assertThat(tables.size()).isEqualTo(2);
+        Table table1 = tables.get(0);
+        assertThat(table1.getTable()).isEqualTo(bookingsTable);
+        assertThat(table1.getColumns()).hasSize(1);
+        Table table2 = tables.get(1);
+        assertThat(table2.getTable()).isEqualTo(flightsTable);
+        assertThat(table2.getColumns()).hasSize(1);
     }
 }

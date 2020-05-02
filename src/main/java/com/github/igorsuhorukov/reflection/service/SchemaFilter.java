@@ -43,11 +43,40 @@ public class SchemaFilter {
     private List<Table> filterTableWithColumns(Database database, ExactTablesAndColumnsOnlyFilter tablesAndColumns,
                                                boolean includeView) {
         Collection<org.schemaspy.model.Table> tables = getTablesAndViews(database, includeView);
-        return tables.stream().filter(table -> tablesAndColumns.containsKey(table.getName())).map(table ->
-                new Table(database.getSchema().getName(), table.getName(), table.getColumns().stream().
+        List<Table> matchedTables = tables.stream().filter(table -> tablesAndColumns.containsKey(table.getName())).
+                map(table -> new Table(database.getSchema().getName(), table.getName(), table.getColumns().stream().
                         filter(tableColumn -> tablesAndColumns.get(table.getName()).contains(tableColumn.getName())).
                         map(tableColumn -> new Column(tableColumn.getName())).collect(Collectors.toList()))).
+                //filter(table -> !table.getColumns().isEmpty()).
                 collect(Collectors.toList());
+        if(tablesAndColumns.isFailOnMismatch() && matchedTables.size()!=tablesAndColumns.size()){
+            Set<String> tablesNotFound = new HashSet<>(tablesAndColumns.keySet());
+            tablesNotFound.removeAll(matchedTables.stream().map(Table::getTable).collect(Collectors.toList()));
+            throw new IllegalStateException("Following tables not found in database: " +
+                                                String.join(", ", tablesNotFound));
+        }
+        if(tablesAndColumns.isFailOnMismatch()){
+            List<Map.Entry<String, Set<String>>> columnMismatchList = compareColumns(tablesAndColumns, matchedTables);
+            if(!columnMismatchList.isEmpty()){
+                throw new IllegalStateException("Following columns isn't found in database: " + columnMismatchList);
+            }
+        }
+        return matchedTables;
+    }
+
+    private List<Map.Entry<String, Set<String>>> compareColumns(ExactTablesAndColumnsOnlyFilter tablesAndColumns,
+                                                                List<Table> matchedTables) {
+        return matchedTables.stream().map(table -> {
+            Set<String> columnsFromConfiguration = tablesAndColumns.get(table.getTable());
+            if (columnsFromConfiguration.size() != table.getColumns().size()) {
+                Set<String> columnsNotFound = new HashSet<>(columnsFromConfiguration);
+                columnsNotFound.removeAll(table.getColumns().stream().
+                        map(Column::getColumn).collect(Collectors.toList()));
+                return new AbstractMap.SimpleImmutableEntry<>(table.getTable(), columnsNotFound);
+            } else {
+                return null;
+            }
+        }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     private List<Table> filterColumn(Database database, ComplexFilter filter,
