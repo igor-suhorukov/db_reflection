@@ -14,7 +14,7 @@ public class SchemaFilterTest {
     void testAllTables() {
         Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
-                DbObjectFilter(null, null, false,null));
+                DbObjectFilter(null, false,  null));
         assertThat(tables).hasSize(8);
     }
 /*
@@ -38,7 +38,7 @@ public class SchemaFilterTest {
     void testAllTablesWithViews() {
         Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
-                DbObjectFilter(null, null, true,null));
+                DbObjectFilter(null,true, null));
         assertThat(tables).hasSize(12);
     }
 }

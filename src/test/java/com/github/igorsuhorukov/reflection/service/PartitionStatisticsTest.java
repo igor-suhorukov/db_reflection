@@ -30,7 +30,7 @@ public class PartitionStatisticsTest {
     void partitionClause() throws Exception{
         Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
-                DbObjectFilter(null, null, true,null));
+                DbObjectFilter(null, true,null));
         final TableSettings tableSettings = new TableSettings();
         tableSettings.put("bookings", new Settings(Collections.singletonList(
                 new Partition("book_date_part", "book_date",
@@ -65,7 +65,7 @@ public class PartitionStatisticsTest {
     void partitionClauseRefreshRule() {
         Database database = Utils.getDatabase();
         List<Table> tables = new SchemaFilter().filterDatabaseObject(database, new
-                DbObjectFilter(null, null, true,null));
+                DbObjectFilter(null, true,null));
         String bookings = "bookings";
         String flights = "flights";
         final TableSettings tableSettings = new TableSettings();
