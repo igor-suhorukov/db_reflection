@@ -1,3 +1,313 @@
+Index: src/main/java/org/schemaspy/model/Catalog.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Catalog.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Catalog.java	(date 1587503359136)
+@@ -21,6 +21,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.Objects;
+
+ /**
+@@ -29,7 +30,7 @@
+  * @author Daniel Watt
+  * @author Nils Petzaell
+  */
+-public final class Catalog implements Comparable<Catalog>{
++public final class Catalog implements Comparable<Catalog> , Serializable {
+     private final String name;
+     private String comment;
+
+Index: src/test/java/org/schemaspy/integrationtesting/pgsql/PgSqlCheckConstraintsIT.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/test/java/org/schemaspy/integrationtesting/pgsql/PgSqlCheckConstraintsIT.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/test/java/org/schemaspy/integrationtesting/pgsql/PgSqlCheckConstraintsIT.java	(date 1589052981670)
+@@ -22,46 +22,50 @@
+ import org.junit.Before;
+ import org.junit.ClassRule;
+ import org.junit.Test;
+-import org.junit.runner.RunWith;
+ import org.mockito.Mock;
+ import org.schemaspy.Config;
+-import org.schemaspy.cli.CommandLineArgumentParser;
+-import org.schemaspy.cli.CommandLineArguments;
+-import org.schemaspy.input.dbms.service.DatabaseService;
+-import org.schemaspy.input.dbms.service.SqlService;
++import org.schemaspy.input.dbms.service.*;
+ import org.schemaspy.integrationtesting.PgSqlSuite;
+ import org.schemaspy.model.Database;
+ import org.schemaspy.model.ProgressListener;
++import org.schemaspy.model.Table;
++import org.schemaspy.output.xml.XmlProducerException;
++import org.schemaspy.output.xml.dom.DOMUtil;
++import org.schemaspy.output.xml.dom.XmlRoutineFormatter;
++import org.schemaspy.output.xml.dom.XmlSequenceFormatter;
++import org.schemaspy.output.xml.dom.XmlTableFormatter;
+ import org.schemaspy.testing.SQLScriptsRunner;
+ import org.schemaspy.testing.SuiteOrTestJdbcContainerRule;
+ import org.springframework.beans.factory.annotation.Autowired;
+-import org.springframework.boot.test.context.SpringBootTest;
+-import org.springframework.test.annotation.DirtiesContext;
+-import org.springframework.test.context.junit4.SpringRunner;
+ import org.testcontainers.containers.PostgreSQLContainer;
++import org.testcontainers.shaded.org.apache.commons.io.IOUtils;
++import org.w3c.dom.Document;
++import org.w3c.dom.Element;
+
+-import java.io.IOException;
++import javax.xml.XMLConstants;
++import javax.xml.parsers.DocumentBuilder;
++import javax.xml.parsers.DocumentBuilderFactory;
++import javax.xml.parsers.ParserConfigurationException;
++import javax.xml.transform.OutputKeys;
++import javax.xml.transform.Transformer;
++import javax.xml.transform.TransformerException;
++import javax.xml.transform.TransformerFactory;
++import javax.xml.transform.dom.DOMSource;
++import javax.xml.transform.stream.StreamResult;
++import java.io.*;
+ import java.sql.SQLException;
++import java.time.Clock;
++import java.util.ArrayList;
++import java.util.Collection;
++import java.util.Objects;
+
+ import static com.github.npetzall.testcontainers.junit.jdbc.JdbcAssumptions.assumeDriverIsPresent;
+ import static org.assertj.core.api.Assertions.assertThat;
+
+-@RunWith(SpringRunner.class)
+-@SpringBootTest
+-@DirtiesContext
+ public class PgSqlCheckConstraintsIT {
+-
+-    @Autowired
+-    private SqlService sqlService;
+-
+-    @Autowired
+-    private DatabaseService databaseService;
+-
+     @Mock
+     private ProgressListener progressListener;
+
+-    @Autowired
+-    private CommandLineArgumentParser commandLineArgumentParser;
+
+     private static Database database;
+
+@@ -72,7 +76,7 @@
+                     new JdbcContainerRule<>(() -> new PostgreSQLContainer("postgres:10.4"))
+                             .assumeDockerIsPresent()
+                             .withAssumptions(assumeDriverIsPresent())
+-                            .withInitFunctions(new SQLScriptsRunner("integrationTesting/pgsql/dbScripts/dvdrental.sql", "\n\n\n"))
++                            .withInitFunctions(new SQLScriptsRunner("integrationTesting/pgsql/dbScripts/demo.sql", "\n\n\n"))
+             );
+
+     @Before
+@@ -83,28 +87,116 @@
+     }
+
+     private void doCreateDatabaseRepresentation() throws SQLException, IOException {
++        String databaseName = "test";
++        String catalogName = "%";
++        String schemaName = "bookings";
+         String[] args = {
+                 "-t", "pgsql",
+-                "-db", "test",
+-                "-s", "public",
+-                "-cat", "%",
++                "-db", databaseName,
++                "-s", schemaName,
++                "-cat", catalogName,
+                 "-o", "target/integrationtesting/pgsqlcheckconstraint",
+                 "-u", "test",
+                 "-p", "test",
+                 "-host", jdbcContainerRule.getContainer().getContainerIpAddress(),
+                 "-port", jdbcContainerRule.getContainer().getMappedPort(5432).toString()
+         };
+-        CommandLineArguments arguments = commandLineArgumentParser.parse(args);
++        SqlService sqlService = new SqlService();
++        ColumnService columnService = new ColumnService(sqlService);
++        IndexService indexService = new IndexService(sqlService);
++        DatabaseService databaseService = new DatabaseService(Clock.systemDefaultZone(), sqlService, new TableService(sqlService, columnService, indexService), new ViewService(sqlService, columnService), new RoutineService(sqlService), new SequenceService(sqlService));
+         Config config = new Config(args);
+         sqlService.connect(config);
+         Database database = new Database(
+                 sqlService.getDbmsMeta(),
+-                arguments.getDatabaseName(),
+-                arguments.getCatalog(),
+-                arguments.getSchema()
++                databaseName,
++                catalogName,
++                schemaName
+         );
+         databaseService.gatherSchemaDetails(config, database, null, progressListener);
+-        this.database = database;
++
++        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
++        ObjectOutputStream objectOutputStream = new ObjectOutputStream(outputStream);
++        objectOutputStream.writeObject(database);
++
++        try (FileOutputStream output = new FileOutputStream("/home/iam/dev/project/db_reflection/model.obj")){
++            IOUtils.write(outputStream.toByteArray(), output);
++        }
++
++        ObjectInputStream objectInputStream = new ObjectInputStream(new ByteArrayInputStream(outputStream.toByteArray()));
++        try {
++            Object db2 = objectInputStream.readObject();
++            db2.hashCode();
++        } catch (ClassNotFoundException e) {
++            e.printStackTrace();
++        }
++
++        Table next = database.getTables().iterator().next();
++
++        //https://habr.com/ru/post/336732/
++
++        XmlTableFormatter xmlTableFormatter = new XmlTableFormatter();
++        XmlRoutineFormatter xmlRoutineFormatter = new XmlRoutineFormatter();
++        XmlSequenceFormatter xmlSequenceFormatter = new XmlSequenceFormatter();
++
++        Collection<Table> tables = new ArrayList<>(database.getTables());
++        tables.addAll(database.getViews());
++        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
++        try {
++            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
++        } catch (ParserConfigurationException e) {
++            //LOGGER.warn("Failed to set secure processing for DocumentBuilderFactory", e);
++        }
++        DocumentBuilder builder;
++        try {
++            builder = factory.newDocumentBuilder();
++        } catch (ParserConfigurationException exc) {
++            throw new XmlProducerException("Failed to get a newDocumentBuilder()",exc);
++        }
++
++        Document document = builder.newDocument();
++        Element rootNode = document.createElement("database");
++        document.appendChild(rootNode);
++        DOMUtil.appendAttribute(rootNode, "name", database.getName());
++        if (Objects.nonNull(database.getSchema()))
++            DOMUtil.appendAttribute(rootNode, "schema", database.getSchema().getName());
++        DOMUtil.appendAttribute(rootNode, "type", database.getDatabaseProduct());
++
++        xmlSequenceFormatter.appendSequences(rootNode, database.getSequences());
++        xmlTableFormatter.appendTables(rootNode, tables);
++        xmlRoutineFormatter.appendRoutines(rootNode, database.getRoutines());
++
++        String xmlName = database.getName();
++
++        // some dbNames have path info in the name...strip it
++        xmlName = new File(xmlName).getName();
++
++        // some dbNames include jdbc driver details including :'s and @'s
++        String[] unusables = xmlName.split("[:@]");
++        xmlName = unusables[unusables.length - 1];
++
++        if (Objects.nonNull(database.getSchema()))
++            xmlName += '.' + database.getSchema().getName();
++
++        document.getDocumentElement().normalize();
++
++        try {
++            TransformerFactory transformerFactory = TransformerFactory.newInstance();
++            transformerFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
++            Transformer transformer = transformerFactory.newTransformer();
++            transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
++            transformer.setOutputProperty(OutputKeys.METHOD, "xml");
++            transformer.setOutputProperty(OutputKeys.INDENT, "yes");
++            transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
++            transformer.setOutputProperty("{http://xml.apache.org/xslt}indent-amount", "3");
++
++            StringWriter writer = new StringWriter();
++            transformer.transform(new DOMSource(document), new StreamResult(writer));
++
++            this.database = database;
++        } catch (TransformerException e) {
++            e.printStackTrace();
++        }
+     }
+
+     @Test
+Index: src/main/java/org/schemaspy/input/dbms/service/SqlService.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/input/dbms/service/SqlService.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/input/dbms/service/SqlService.java	(date 1589045878743)
+@@ -67,14 +67,18 @@
+
+     public DatabaseMetaData connect(Config config) throws IOException, SQLException {
+         DbDriverLoader driverLoader = new DbDriverLoader();
+-        connection = driverLoader.getConnection(config);
++        Connection connection = driverLoader.getConnection(config);
++        return connect(connection, config.isEvaluateAllEnabled());
++    }
+
+-        databaseMetaData = connection.getMetaData();
++    public DatabaseMetaData connect(Connection connection, boolean evaluateAllEnabled) throws SQLException {
++        this.connection = connection;
++        databaseMetaData = this.connection.getMetaData();
+         dbmsMeta = dbmsService.fetchDbmsMeta(databaseMetaData);
+         invalidIdentifierPattern = createInvalidIdentifierPattern(databaseMetaData);
+         allKeywords = dbmsMeta.getAllKeywords();
+
+-        if (config.isEvaluateAllEnabled()) {
++        if (evaluateAllEnabled) {
+             return null;    // no database to return
+         }
+
+Index: src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(date 1587503358944)
+@@ -19,10 +19,12 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
++
+ /**
+  * @author John Currier
+  */
+-public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint {
++public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint implements Serializable {
+     /**
+      * @param parentColumn
+      * @param childColumn
+Index: src/main/java/org/schemaspy/model/DbmsMeta.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/DbmsMeta.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/DbmsMeta.java	(date 1587503358988)
+@@ -18,13 +18,14 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.HashSet;
+ import java.util.Set;
+
+ /**
+  * @author Nils Petzaell
+  */
+-public class DbmsMeta {
++public class DbmsMeta implements Serializable {
+
+     private String productName;
+     private String productVersion;
 Index: src/main/java/org/schemaspy/model/TableColumn.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -74,6 +384,30 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
                  <configuration>
                      <archive>
                          <manifestEntries>
+Index: src/main/java/org/schemaspy/model/ForeignKeyConstraint.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(date 1587503359300)
+@@ -25,6 +25,7 @@
+ import org.slf4j.Logger;
+ import org.slf4j.LoggerFactory;
+
++import java.io.Serializable;
+ import java.lang.invoke.MethodHandles;
+ import java.util.ArrayList;
+ import java.util.Collections;
+@@ -42,7 +43,7 @@
+  * @author Wojciech Kasa
+  * @author Daniel Watt
+  */
+-public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint> {
++public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint>, Serializable {
+     private final String name;
+     private Table parentTable;
+     private final List<TableColumn> parentColumns = new ArrayList<>();
 Index: src/main/java/org/schemaspy/model/TableIndex.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -98,30 +432,6 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
      private final String name;
      private final boolean isUnique;
      private Object id;
-Index: src/main/java/org/schemaspy/model/Catalog.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/Catalog.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/Catalog.java	(date 1587503359136)
-@@ -21,6 +21,7 @@
-  */
- package org.schemaspy.model;
-
-+import java.io.Serializable;
- import java.util.Objects;
-
- /**
-@@ -29,7 +30,7 @@
-  * @author Daniel Watt
-  * @author Nils Petzaell
-  */
--public final class Catalog implements Comparable<Catalog>{
-+public final class Catalog implements Comparable<Catalog> , Serializable {
-     private final String name;
-     private String comment;
-
 Index: src/main/java/org/schemaspy/model/RoutineParameter.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -169,116 +479,6 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
  	private final String name;
  	private String comment =null;
 
-Index: src/main/java/org/schemaspy/model/Sequence.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/Sequence.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/Sequence.java	(date 1587503358852)
-@@ -19,7 +19,9 @@
-
- package org.schemaspy.model;
-
--public class Sequence implements Comparable<Sequence> {
-+import java.io.Serializable;
-+
-+public class Sequence implements Comparable<Sequence>, Serializable {
-     private final String name;
-     private final Integer startValue;
-     private final Integer increment;
-Index: src/main/java/org/schemaspy/model/Routine.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/Routine.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/Routine.java	(date 1587503359256)
-@@ -20,6 +20,7 @@
-  */
- package org.schemaspy.model;
-
-+import java.io.Serializable;
- import java.util.ArrayList;
- import java.util.List;
-
-@@ -29,7 +30,7 @@
-  * @author John Currier
-  * @author Mårten Bohlin
-  */
--public class Routine implements Comparable<Routine> {
-+public class Routine implements Comparable<Routine>, Serializable {
-     private final String name;
-     private final String type;
-     private final String definitionLanguage;
-Index: src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/ImpliedForeignKeyConstraint.java	(date 1587503358944)
-@@ -19,10 +19,12 @@
-  */
- package org.schemaspy.model;
-
-+import java.io.Serializable;
-+
- /**
-  * @author John Currier
-  */
--public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint {
-+public class ImpliedForeignKeyConstraint extends ForeignKeyConstraint implements Serializable {
-     /**
-      * @param parentColumn
-      * @param childColumn
-Index: src/main/java/org/schemaspy/model/DbmsMeta.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/DbmsMeta.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/DbmsMeta.java	(date 1587503358988)
-@@ -18,13 +18,14 @@
-  */
- package org.schemaspy.model;
-
-+import java.io.Serializable;
- import java.util.HashSet;
- import java.util.Set;
-
- /**
-  * @author Nils Petzaell
-  */
--public class DbmsMeta {
-+public class DbmsMeta implements Serializable {
-
-     private String productName;
-     private String productVersion;
-Index: src/main/java/org/schemaspy/model/ForeignKeyConstraint.java
-IDEA additional info:
-Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
-<+>UTF-8
-===================================================================
---- src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
-+++ src/main/java/org/schemaspy/model/ForeignKeyConstraint.java	(date 1587503359300)
-@@ -25,6 +25,7 @@
- import org.slf4j.Logger;
- import org.slf4j.LoggerFactory;
-
-+import java.io.Serializable;
- import java.lang.invoke.MethodHandles;
- import java.util.ArrayList;
- import java.util.Collections;
-@@ -42,7 +43,7 @@
-  * @author Wojciech Kasa
-  * @author Daniel Watt
-  */
--public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint> {
-+public class ForeignKeyConstraint implements Comparable<ForeignKeyConstraint>, Serializable {
-     private final String name;
-     private Table parentTable;
-     private final List<TableColumn> parentColumns = new ArrayList<>();
 Index: src/main/java/org/schemaspy/model/Database.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -303,6 +503,24 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
 
      private final DbmsMeta dbmsMeta;
      private final String databaseName;
+Index: src/main/java/org/schemaspy/model/Sequence.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Sequence.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Sequence.java	(date 1587503358852)
+@@ -19,7 +19,9 @@
+
+ package org.schemaspy.model;
+
+-public class Sequence implements Comparable<Sequence> {
++import java.io.Serializable;
++
++public class Sequence implements Comparable<Sequence>, Serializable {
+     private final String name;
+     private final Integer startValue;
+     private final Integer increment;
 Index: src/main/java/org/schemaspy/model/Table.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
@@ -327,6 +545,30 @@ Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
      private final String catalog;
      private final String schema;
      private final String name;
+Index: src/main/java/org/schemaspy/model/Routine.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- src/main/java/org/schemaspy/model/Routine.java	(revision c8a057cc9b8a69a515467166820f61dedebdab4b)
++++ src/main/java/org/schemaspy/model/Routine.java	(date 1587503359256)
+@@ -20,6 +20,7 @@
+  */
+ package org.schemaspy.model;
+
++import java.io.Serializable;
+ import java.util.ArrayList;
+ import java.util.List;
+
+@@ -29,7 +30,7 @@
+  * @author John Currier
+  * @author Mårten Bohlin
+  */
+-public class Routine implements Comparable<Routine> {
++public class Routine implements Comparable<Routine>, Serializable {
+     private final String name;
+     private final String type;
+     private final String definitionLanguage;
 Index: src/main/java/org/schemaspy/model/CombinedMap.java
 IDEA additional info:
 Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
